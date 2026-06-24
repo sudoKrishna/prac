@@ -1,7 +1,13 @@
 import OpenAI from "openai";
 import { get_current_time , calculator } from "./tool";
+import readline from "readline"
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const r1 = readline.createInterface({
+    input : process.stdin,
+    output : process.stdout,
+})
 
 const tools = [
   {
@@ -43,11 +49,33 @@ const toolRegistry: Record<string, (...args: any[]) => Promise<string>> = {
   calculator,
 };
 
+const messages : OpenAI.Chat.ChatCompletionMessageParam[] = [
+    {role : "system" , content : "you are a helpful assistant. Always use the calculator tool for arithmetic, even simple math. Be concise"},
+];
+
+// r1.question("input: ", async (input) => {
+//     const answer = await runAgent(input);
+//     console.log("\nAssistant:" , answer);
+//     r1.close();
+// })
+
+function askLoop () {
+    r1.question("\nYou :", async (input) => {
+        if(input.trim().toLowerCase() === "exit") {
+            r1.close();
+            return
+        }
+        const answer =  await runAgent(input);
+        console.log("Assistant:", answer);
+
+        askLoop();
+    })
+}
+askLoop();
 
 async function  runAgent(userMessage : string) {
-    const messages : OpenAI.Chat.ChatCompletionMessageParam[] = [
-        {role : "user" , content : userMessage}
-    ];
+
+    messages.push({role: "user", content : userMessage})
 
    const MAX_ITERATIONS = 5;
    let i = 0;
@@ -66,6 +94,7 @@ async function  runAgent(userMessage : string) {
 
     if(!toolCalls || toolCalls.length === 0) {
         console.log("Final answer"  , responseMessage.content)
+        messages.push(responseMessage)
         return responseMessage.content
     }
     messages.push(responseMessage)
@@ -104,4 +133,3 @@ async function  runAgent(userMessage : string) {
    return null;
 
 }
-runAgent("What is 47 times 89? Also tell me the current time.");
