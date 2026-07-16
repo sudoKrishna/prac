@@ -1,135 +1,131 @@
-import OpenAI from "openai";
-import { get_current_time , calculator } from "./tool";
-import readline from "readline"
+//   1 . Promisify a callback API that has multiple 
+// success values (callback(err, a, b)) — 
+// util.promisify only gives you a. How do you handle it? 🪤
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// import { promisify } from "node:util";
 
-const r1 = readline.createInterface({
-    input : process.stdin,
-    output : process.stdout,
-})
+// function getUser(callback: (err: Error | null, user?: string) => void) {
+//     callback(null, "Krishna");
+// }
 
-const tools = [
-  {
-    type: "function" as const,
-    function: {
-      name: "get_current_time",
-      description: "Get the current local time in HH:MM:SS format.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
-    },
-  },
-  {
-  type: "function" as const,
-  function: {
-    name: "calculator",
-    description: "Perform a basic arithmetic operation (add, subtract, multiply, divide) on two numbers.",
-    parameters: {
-      type: "object",
-      properties: {
-        a: { type: "number", description: "the first number" },
-        b: { type: "number", description: "the second number" },
-        operation: {
-          type: "string",
-          enum: ["add", "subtract", "multiply", "divide"],
-          description: "Which operation to perform",
-        },
-      },
-      required: ["a", "b", "operation"],
-    },
-  },
-},
-];
+// async function main() {
+//     const getUserPromise = promisify(getUser);
+//     const user = await getUserPromise();
+//     console.log(user);
+// }
 
-const toolRegistry: Record<string, (...args: any[]) => Promise<string>> = {
-  get_current_time,
-  calculator,
-};
+// main();
+// function getData(callback :Function) {
+//     const name = "krishna";
+//     const age = 20;
 
-const messages : OpenAI.Chat.ChatCompletionMessageParam[] = [
-    {role : "system" , content : "you are a helpful assistant. Always use the calculator tool for arithmetic, even simple math. Be concise"},
-];
+//     callback(null , name , age)
+// }
 
-// r1.question("input: ", async (input) => {
-//     const answer = await runAgent(input);
-//     console.log("\nAssistant:" , answer);
-//     r1.close();
+// function getUser(): Promise<{ name: string; age: number }> {
+//     return new Promise((resolve, reject) => {
+//         getData((err: any, name: any, age: any) => {
+//             if (err) {
+//                 reject(err);
+//             } else {
+//                 resolve({ name, age });
+//             }
+//         });
+//     });
+// }
+
+// async function main() {
+//     const user = await getUser();
+//     console.log(user);
+// }
+// main()
+
+// const util = require("node:util")
+
+// function getUserData(callback) {
+//     setTimeout(() => {
+//         callback(null , "RAhul" , 334)
+//     }, 1000)
+// }
+
+// getUserData[util.promisify.custom] = function () {
+//     return new Promise((resolve , reject) => {
+//         getUserDate((err , name , age) => {
+//            if(err) {
+//             reject(err)
+//            }
+//            else {
+//             resolve({name , age})
+//            }
+//         }) 
+//     })
+// }
+
+// const getUserDataPromise = util.promisify(getUserData)
+// (async () => {
+//     const user = await getUserDataPromise();
+
+//     console.log(user)
 // })
 
-function askLoop () {
-    r1.question("\nYou :", async (input) => {
-        if(input.trim().toLowerCase() === "exit") {
-            r1.close();
-            return
-        }
-        const answer =  await runAgent(input);
-        console.log("Assistant:", answer);
+// In the interview
+// Q .What if callback is callback(err, a, b)? util.promisify only returns a
 
-        askLoop();
-    })
-}
-askLoop();
+//- by default util.promisify() resolve only the first success argument .
+// if the callback returns mutilple success value , i would manully wrap it in the promise
+// and resolve an object or array containing all valuse . if i own the api 
+// i can also define util.promisify.custom() to customisize the promisifed behavior.
 
-async function  runAgent(userMessage : string) {
+// function promisify(fn : any) {
+//     return function(...args : any[]) {
+//      return new Promise((resolve , reject) => {
+//         const callback = (err : any ,result : any) => {
+//             if(err) {
+//                 reject(err)
+//              } else {
+//                 resolve(result)
+//              }
+//         }
+//         fn.call(this , ...args , callback)
+//      })
+//     }
+// }
 
-    messages.push({role: "user", content : userMessage})
+// const user = {
+//     name : "rahul",
+    
+//     getName(callback :any) {
+//         callback(null , this.name)
+//     }
 
-   const MAX_ITERATIONS = 5;
-   let i = 0;
+// }
 
-   while(i < MAX_ITERATIONS) {
-    console.log(`\n--- Loop iteration ${i + 1} ---`)
+// user.getName((err :any , name :any ) => {
+//     console.log(name)
+// })
 
-    const response = await client.chat.completions.create({
-        model : "gpt-4o-mini",
-        messages,
-        tools
-    });
+// function myPromiseAll(promises : any) {
+// return new Promise((resolve , reject) => {
+//     const result : any = [];
+//     let completed = 0
 
-    const responseMessage :any  = response.choices[0]?.message;
-    const toolCalls = responseMessage.tool_calls;
+//     if(promises.length === 0) {
+//         resolve([])
+//     }
+//     promises.forEach((promise : any, index : any) => {
+//         Promise.resolve(promise)
+//         .then(value => {
+//             result[index] = value;
 
-    if(!toolCalls || toolCalls.length === 0) {
-        console.log("Final answer"  , responseMessage.content)
-        messages.push(responseMessage)
-        return responseMessage.content
-    }
-    messages.push(responseMessage)
+//             completed++;
 
-    for (const toolCall of toolCalls) {
-    const toolName = toolCall.function.name;
-    const args = JSON.parse(toolCall.function.arguments || "{}");
-
-    const toolFn = toolRegistry[toolName];
-    if (!toolFn) {
-        throw new Error(`No tool registered for: ${toolName}`);
-    }
-
-    let result: string;
-
-    if (toolName === "calculator") {
-        result = await calculator(args.a, args.b, args.operation);
-    } else {
-        result = await (toolFn as () => Promise<string>)();
-    }
-
-    console.log("tool result :", result);
-
-    messages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: result,
-    });
-}
-    i++;
-   }
-
-   console.log("hit max interation withtout the finnal terminal")
+//             if(completed === promise.length) {
+//                 resolve(result)
+//             }
+//         })
+//         .catch(reject)
+//     })
+// })
+// }
 
 
-   return null;
-
-}
